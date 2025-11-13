@@ -330,6 +330,35 @@ def advtok_interaction(
     if verbose:
         print(Fore.GREEN + f"\n✓ Optimization complete in {format_time(opt_time)}" + Style.RESET_ALL)
         print(f"  Adversarial tokenization found: {len(X)} tokens")
+
+        # Show the adversarial input that will be sent
+        print_section("Adversarial Input (What AdvTok Submits)", color=Fore.MAGENTA)
+        print(Fore.CYAN + "Standard Tokenization:" + Style.RESET_ALL)
+
+        # Show what normal tokenization would look like
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": request}
+        ]
+        normal_formatted = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=False
+        )
+        normal_tokens = tokenizer.encode(normal_formatted)
+        print(f"  Tokens: {normal_tokens[:50]}{'...' if len(normal_tokens) > 50 else ''}")
+        print(f"  Total: {len(normal_tokens)} tokens")
+
+        print(Fore.MAGENTA + Style.BRIGHT + "\nAdversarial Tokenization:" + Style.RESET_ALL)
+        print(Fore.MAGENTA + f"  Token IDs: {X[:50]}{'...' if len(X) > 50 else ''}" + Style.RESET_ALL)
+        print(Fore.MAGENTA + f"  Total: {len(X)} tokens" + Style.RESET_ALL)
+        print(Fore.MAGENTA + f"  Difference: {abs(len(X) - len(normal_tokens))} tokens" + Style.RESET_ALL)
+
+        # Decode and show the adversarial input
+        adversarial_input = tokenizer.decode(X)
+        print(Fore.MAGENTA + Style.BRIGHT + "\nDecoded Adversarial Input (sent to model):" + Style.RESET_ALL)
+        print(Fore.MAGENTA + adversarial_input + Style.RESET_ALL)
+
         print(Fore.YELLOW + f"\nGenerating {num_samples} response samples..." + Style.RESET_ALL)
 
     # Generate samples with adversarial tokenization
