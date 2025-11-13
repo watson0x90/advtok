@@ -66,6 +66,27 @@ EXAMPLE_REQUESTS = {
     }
 }
 
+# Text manipulation techniques for exploring alternative tokenizations
+TEXT_VARIATIONS = {
+    "unicode_homoglyphs": {
+        "e": ["е", "ė", "ë"],  # Cyrillic е, Latin with dot, Latin with diaeresis
+        "a": ["а", "ā", "ă"],  # Cyrillic а, Latin with macron, Latin with breve
+        "o": ["о", "ō", "ö"],  # Cyrillic о, Latin with macron, Latin with diaeresis
+        "i": ["і", "ī", "ï"],  # Ukrainian і, Latin with macron, Latin with diaeresis
+    },
+    "whitespace_tricks": [
+        " ",      # Normal space
+        "  ",     # Double space
+        "\u00A0", # Non-breaking space
+        "\u2009", # Thin space
+        "\u200B", # Zero-width space
+    ],
+    "punctuation_variants": {
+        "-": ["‐", "‑", "—", "–"],  # Hyphen, non-breaking hyphen, em-dash, en-dash
+        "'": ["'", "'", "`"],        # Apostrophe variants
+    }
+}
+
 
 # ============================================================================
 # Utility Functions
@@ -491,6 +512,153 @@ def test_isolation(
 
 
 # ============================================================================
+# Text-Based Attack Feasibility Test
+# ============================================================================
+
+def test_text_based_feasibility(
+    model,
+    tokenizer,
+    request: str,
+    target_response: str,
+    system_prompt: Optional[str] = None
+):
+    """
+    Test if AdvTok's adversarial tokenization can be achieved via text input.
+
+    This demonstrates the difference between:
+    1. Research/API attack: Direct token manipulation (AdvTok)
+    2. Real-world attack: Text-only input (web forms)
+    """
+    print_header("Text-Based Attack Feasibility Test", color=Fore.CYAN + Style.BRIGHT)
+    print("This test explores whether AdvTok's tokenization can be achieved via text input.")
+    print("Simulates real-world scenario: attacker only controls TEXT, not tokens.\n")
+
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    # Step 1: Run AdvTok to find adversarial tokenization
+    print_section("Step 1: Find Adversarial Tokenization (Research/API)", color=Fore.MAGENTA)
+    print(Fore.YELLOW + "Running AdvTok optimization (as if we have API access)..." + Style.RESET_ALL)
+
+    X = advtok.run(
+        model, tokenizer, request,
+        50,  # Fewer iterations for speed
+        target_response, 128,
+        X_0="random",
+        sys_prompt=system_prompt
+    )
+
+    print(Fore.GREEN + f"✓ Found adversarial tokenization: {len(X)} tokens" + Style.RESET_ALL)
+    adversarial_tokens = X
+
+    # Step 2: Decode the adversarial tokens to text
+    print_section("Step 2: What Text Does It Decode To?", color=Fore.CYAN)
+
+    # Decode just the user request portion (skip system prompt and special tokens)
+    full_decoded = tokenizer.decode(X)
+    print(Fore.CYAN + "Full decoded adversarial input:" + Style.RESET_ALL)
+    print(Fore.WHITE + full_decoded[:300] + "..." + Style.RESET_ALL)
+
+    # Step 3: Try to tokenize that text normally
+    print_section("Step 3: Can We Reproduce It With Text?", color=Fore.YELLOW)
+    print(Fore.YELLOW + "Testing: If we submit the decoded text, do we get the same tokens?" + Style.RESET_ALL)
+
+    # Build messages with the original request
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": request}
+    ]
+    normal_formatted = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=False
+    )
+    normal_tokens = tokenizer.encode(normal_formatted)
+
+    print(f"\nOriginal request: {Fore.CYAN}{request}{Style.RESET_ALL}")
+    print(f"Normal tokenization: {len(normal_tokens)} tokens")
+    print(f"Adversarial tokenization: {len(adversarial_tokens)} tokens")
+
+    # Compare token sequences
+    tokens_match = (len(normal_tokens) == len(adversarial_tokens) and
+                   all(n == a for n, a in zip(normal_tokens, adversarial_tokens)))
+
+    if tokens_match:
+        print(Fore.GREEN + "\n✓ MATCH: Text produces same tokenization!" + Style.RESET_ALL)
+        print(Fore.GREEN + "  → This attack IS feasible via text input" + Style.RESET_ALL)
+    else:
+        print(Fore.RED + "\n✗ NO MATCH: Text produces different tokenization!" + Style.RESET_ALL)
+        print(Fore.RED + "  → This attack is NOT feasible via text-only input" + Style.RESET_ALL)
+
+        # Show the difference
+        diff_count = sum(1 for n, a in zip(normal_tokens, adversarial_tokens) if n != a)
+        print(f"\n  Token differences: {diff_count}/{min(len(normal_tokens), len(adversarial_tokens))}")
+        print(f"  Length difference: {abs(len(normal_tokens) - len(adversarial_tokens))} tokens")
+
+    # Step 4: Explore text-based alternatives
+    print_section("Step 4: Text-Based Attack Alternatives", color=Fore.MAGENTA)
+    print("Since we can't control tokens directly, what CAN we do via text?\n")
+
+    print(Fore.CYAN + "1. Unicode Homoglyphs" + Style.RESET_ALL)
+    print("   Replace visually similar characters (e.g., Latin 'e' → Cyrillic 'е')")
+    if 'e' in request.lower():
+        variant = request.replace('e', 'е')  # Cyrillic е
+        variant_tokens = tokenizer.encode(variant)
+        print(f"   Original: '{request}' → {len(normal_tokens)} tokens")
+        print(f"   Variant:  '{variant}' → {len(variant_tokens)} tokens")
+        if len(variant_tokens) != len(normal_tokens):
+            print(Fore.YELLOW + f"   ⚠ Different tokenization! ({abs(len(variant_tokens) - len(normal_tokens))} token difference)" + Style.RESET_ALL)
+
+    print(Fore.CYAN + "\n2. Whitespace Manipulation" + Style.RESET_ALL)
+    print("   Use different whitespace characters (space, nbsp, zero-width, etc.)")
+    variant = request.replace(' ', '\u00A0')  # Non-breaking space
+    variant_tokens = tokenizer.encode(variant)
+    print(f"   Original: {len(normal_tokens)} tokens")
+    print(f"   With NBSP: {len(variant_tokens)} tokens")
+    if len(variant_tokens) != len(normal_tokens):
+        print(Fore.YELLOW + f"   ⚠ Different tokenization! ({abs(len(variant_tokens) - len(normal_tokens))} token difference)" + Style.RESET_ALL)
+
+    print(Fore.CYAN + "\n3. Character Substitutions" + Style.RESET_ALL)
+    print("   Use punctuation/hyphen variants")
+    if '-' in request or ' ' in request:
+        variant = request.replace(' ', '-')
+        variant_tokens = tokenizer.encode(variant)
+        print(f"   Spaces to hyphens: {len(variant_tokens)} tokens")
+        if len(variant_tokens) != len(normal_tokens):
+            print(Fore.YELLOW + f"   ⚠ Different tokenization! ({abs(len(variant_tokens) - len(normal_tokens))} token difference)" + Style.RESET_ALL)
+
+    # Step 5: Conclusion
+    print_section("Conclusion: Real-World Attack Feasibility", color=Fore.CYAN)
+
+    print(Fore.YELLOW + "AdvTok's Direct Token Manipulation:" + Style.RESET_ALL)
+    print("  ✅ Works perfectly with API access")
+    print("  ✅ Can send arbitrary token sequences")
+    print("  ❌ Requires direct model access\n")
+
+    print(Fore.YELLOW + "Text-Only Input (Web Forms):" + Style.RESET_ALL)
+    if tokens_match:
+        print(Fore.GREEN + "  ✅ This specific attack IS reproducible via text" + Style.RESET_ALL)
+    else:
+        print(Fore.RED + "  ❌ This specific attack NOT reproducible via text" + Style.RESET_ALL)
+    print("  ⚠️ Can try Unicode/whitespace/punctuation tricks")
+    print("  ⚠️ Success depends on tokenizer behavior")
+    print("  ⚠️ Each variation needs separate testing\n")
+
+    print(Fore.CYAN + "Key Insight:" + Style.RESET_ALL)
+    print("  Tokenization is DETERMINISTIC: same text → same tokens")
+    print("  AdvTok finds tokens that may NOT correspond to any typeable text")
+    print("  Real attacks need to find text variants that produce similar patterns\n")
+
+    print(Fore.MAGENTA + "Defense Implications:" + Style.RESET_ALL)
+    print("  • API endpoints: Must validate/sanitize token inputs")
+    print("  • Web forms: Less vulnerable to exact AdvTok attack")
+    print("  • Unicode normalization: Prevents homoglyph tricks")
+    print("  • Multi-layer defense: Tokenization is just ONE layer")
+
+    print_header("Feasibility Test Complete")
+
+
+# ============================================================================
 # Interactive Mode
 # ============================================================================
 
@@ -561,10 +729,13 @@ def print_menu():
     print("  3. State Isolation Test")
     print("     - Verify no contamination between runs")
     print()
-    print("  4. Interactive Mode")
+    print("  4. Text-Based Attack Feasibility")
+    print("     - Can this attack work via web forms?")
+    print()
+    print("  5. Interactive Mode")
     print("     - Enter custom requests/responses")
     print()
-    print("  5. Quit")
+    print("  6. Quit")
     print()
 
 
@@ -574,7 +745,7 @@ def main_menu(model, tokenizer):
     """
     while True:
         print_menu()
-        choice = input("Enter choice (1-5): ").strip()
+        choice = input("Enter choice (1-6): ").strip()
 
         if choice == '1':
             # Basic demonstration
@@ -601,10 +772,19 @@ def main_menu(model, tokenizer):
             test_isolation(model, tokenizer)
 
         elif choice == '4':
+            # Text-based feasibility test
+            example = EXAMPLE_REQUESTS["email"]
+            test_text_based_feasibility(
+                model, tokenizer,
+                example["request"],
+                example["response"]
+            )
+
+        elif choice == '5':
             # Interactive mode
             interactive_mode(model, tokenizer)
 
-        elif choice == '5' or choice.lower() in ['quit', 'exit', 'q']:
+        elif choice == '6' or choice.lower() in ['quit', 'exit', 'q']:
             print("\nExiting...")
             break
 
@@ -642,6 +822,8 @@ For educational and security research purposes only.
                        help='Run side-by-side comparison')
     parser.add_argument('--isolation', action='store_true',
                        help='Test state isolation')
+    parser.add_argument('--feasibility', action='store_true',
+                       help='Test text-based attack feasibility')
     parser.add_argument('--custom', action='store_true',
                        help='Interactive mode with custom inputs')
     parser.add_argument('--model', type=str, default=DEFAULT_MODEL,
@@ -695,6 +877,16 @@ For educational and security research purposes only.
         elif args.isolation:
             # Isolation test
             test_isolation(model, tokenizer)
+
+        elif args.feasibility:
+            # Text-based feasibility test
+            if args.request and args.response:
+                request, response = args.request, args.response
+            else:
+                example = EXAMPLE_REQUESTS["email"]
+                request, response = example["request"], example["response"]
+
+            test_text_based_feasibility(model, tokenizer, request, response)
 
         elif args.custom:
             # Interactive mode
