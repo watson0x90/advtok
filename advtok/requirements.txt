@@ -5,3 +5,5 @@ transformers >= 4.47.1
 graphviz >= 0.20.3
 numpy <= 1.26.4
 tqdm >= 4.67.1
+colorama >= 0.4.6
+textual >= 0.40.0
