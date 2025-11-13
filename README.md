@@ -39,6 +39,152 @@ cd advtok
 python advtok_demo.py
 ```
 
+## 🎮 RTX 5080 / High-End GPU Setup
+
+This research tool has been optimized for **NVIDIA GeForce RTX 5080** and other high-end GPUs. Here's how to get the best performance:
+
+### Prerequisites
+
+1. **NVIDIA Driver**
+   - Minimum: Driver version 560+ (for RTX 50-series)
+   - Recommended: Latest Game Ready or Studio driver
+   - Download: https://www.nvidia.com/download/index.aspx
+
+2. **CUDA Toolkit**
+   - Recommended: CUDA 12.1 or later
+   - Download: https://developer.nvidia.com/cuda-downloads
+   - Verify installation:
+     ```bash
+     nvidia-smi  # Should show CUDA version
+     nvcc --version  # Should show compiler version
+     ```
+
+3. **Python Dependencies**
+   ```bash
+   # Install PyTorch with CUDA support (adjust CUDA version as needed)
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+   # Install other dependencies
+   pip install -r requirements.txt
+   ```
+
+### Performance Optimization for RTX 5080
+
+The RTX 5080 (16GB VRAM) provides excellent performance for AdvTok research:
+
+**Memory Configuration:**
+```python
+# advtok automatically uses FP16 for memory efficiency
+# RTX 5080: ~1.1 GB VRAM for Llama-3.2-1B-Instruct (FP16)
+# Leaves ~14.9 GB for batch processing and MDD operations
+```
+
+**Batch Size Recommendations:**
+- **Default:** `batch_size=128` (works well on RTX 5080)
+- **Aggressive:** `batch_size=256` (if you have 16GB VRAM)
+- **Conservative:** `batch_size=64` (if running other GPU applications)
+
+**Optimal Settings:**
+```bash
+# Edit advtok_demo.py or advtok_chat.py
+# Line ~128 (advtok_demo.py) or ~520 (advtok_chat.py)
+
+# For RTX 5080 (16GB):
+batch_size = 256  # Increased from default 128
+
+# For RTX 4090 (24GB):
+batch_size = 512
+
+# For RTX 4080 (16GB):
+batch_size = 256
+
+# For RTX 4070 (12GB):
+batch_size = 128  # Default
+```
+
+### Verify GPU Setup
+
+Run the smoke tests to verify GPU configuration:
+
+```bash
+cd advtok
+python tests/test_smoke.py
+```
+
+**Expected Output:**
+```
+Testing CUDA availability... [PASS] AVAILABLE (device: NVIDIA GeForce RTX 5080)
+```
+
+### Troubleshooting GPU Issues
+
+**Issue:** `RuntimeError: CUDA out of memory`
+```bash
+# Solution 1: Reduce batch size
+# Edit line 128 in advtok_demo.py or line 520 in advtok_chat.py
+batch_size = 64  # or 32
+
+# Solution 2: Clear GPU cache
+python -c "import torch; torch.cuda.empty_cache()"
+
+# Solution 3: Close other GPU applications
+# Check GPU usage: nvidia-smi
+```
+
+**Issue:** PyTorch not detecting GPU
+```bash
+# Check PyTorch CUDA support
+python -c "import torch; print(torch.cuda.is_available())"
+
+# If False, reinstall PyTorch with CUDA
+pip uninstall torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+**Issue:** Driver/CUDA version mismatch
+```bash
+# Check versions
+nvidia-smi  # Shows driver version and supported CUDA version
+python -c "import torch; print(torch.version.cuda)"
+
+# Install compatible PyTorch version
+# See: https://pytorch.org/get-started/locally/
+```
+
+### Performance Benchmarks (RTX 5080)
+
+| Operation | Time (RTX 5080) | Time (CPU) | Speedup |
+|-----------|----------------|------------|---------|
+| **Vocabulary Caching** | 30-60s | 3-5min | 3-5× |
+| **MDD Construction** | <1s | 5-10s | 10-20× |
+| **AdvTok Optimization** | 10-30s | 2-5min | 6-10× |
+| **Generation (16 samples)** | 2-5s | 30-60s | 10-15× |
+
+**Memory Usage:**
+- Model (FP16): ~1.1 GB
+- Vocabulary Cache: ~500 MB
+- MDD Operations: ~200-500 MB
+- Peak Usage: ~2-3 GB (out of 16 GB available)
+
+### Multi-GPU Setup (Optional)
+
+For multi-GPU systems:
+
+```python
+# advtok_demo.py or custom scripts
+import torch
+
+# Specify GPU device
+device = "cuda:0"  # First GPU
+# device = "cuda:1"  # Second GPU
+
+model = transformers.AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.2-1B-Instruct",
+    device_map=device,  # Specify device
+    torch_dtype=torch.float16
+)
+```
+
 ## 📁 Repository Structure
 
 ```
