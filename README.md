@@ -213,6 +213,13 @@ It also probably works with the following tokenizers (but not yet verified):
 It *might* work with other tokenizers, but this is not guaranteed, as these tokenizers might have
 specific edge cases not covered by our code.
 
+## Nvidia 5080 Suppport
+To achieve 5080 support, the following nightly build will need to be installed. 
+
+```
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+```
+
 ## How to cite
 
 This work implements `advtok`, described in full detail in the paper ["Adversarial
