@@ -1,5 +1,28 @@
 # AdvTok Research - Adversarial Tokenization Attacks
 
+> **DISCLAIMER: FOR EDUCATIONAL AND RESEARCH PURPOSES ONLY**
+>
+> This is a **research branch** focused on stability improvements and educational demonstrations of adversarial tokenization attacks on LLM safety guardrails. This tool is intended solely for:
+> - Academic research and security analysis
+> - Educational demonstrations of LLM vulnerabilities
+> - Authorized penetration testing and red-teaming
+> - Developing improved safety mechanisms
+>
+> **NOT** for malicious use, production deployment without safeguards, or bypassing legitimate safety controls.
+>
+> **Full credit to the original authors:**
+> - **Renato Geh** (RenatoGeh)
+> - **Zilei Shao**
+> - **Guy Van Den Broeck**
+>
+> **Original Repository:** https://github.com/RenatoGeh/advtok
+> **Paper:** [Adversarial Tokenization (ACL 2025)](https://aclanthology.org/2025.acl-long.1012/)
+> **arXiv:** https://arxiv.org/abs/2503.02174
+>
+> This research branch contains stability fixes, performance optimizations, and comprehensive testing not present in the original implementation. All core algorithms and research contributions are from the original authors.
+
+---
+
 Production-ready research tool for demonstrating and analyzing adversarial tokenization attacks on LLM safety guardrails.
 
 ## 🎯 Quick Start
@@ -264,19 +287,26 @@ The same text can have **multiple tokenizations**. AdvTok finds tokenizations th
 | **Ctrl+C** | Broken | <1s | ✅ Fixed |
 | **Test Coverage** | 0% | 90%+ | ✅ Comprehensive |
 
-## 🎓 Educational Purpose
+## 🎓 Educational & Research Use Only
 
-This tool is for:
-- ✅ Security research
-- ✅ Understanding LLM vulnerabilities
-- ✅ Developing better safety mechanisms
-- ✅ Educational demonstrations
-- ✅ Authorized penetration testing
+**IMPORTANT: This is a research tool for educational purposes only.**
 
-Not for:
-- ❌ Malicious use
-- ❌ Production deployment without safeguards
-- ❌ Bypassing legitimate safety controls
+### Authorized Use Cases:
+- ✅ Academic research and security analysis
+- ✅ Understanding LLM vulnerabilities and tokenization attacks
+- ✅ Developing and testing improved safety mechanisms
+- ✅ Educational demonstrations in controlled environments
+- ✅ Authorized penetration testing and red-teaming exercises
+- ✅ Security audits with proper authorization
+
+### Prohibited Use Cases:
+- ❌ Any malicious or unauthorized use
+- ❌ Production deployment without appropriate safeguards
+- ❌ Bypassing legitimate safety controls for harmful purposes
+- ❌ Attacks on systems without explicit authorization
+- ❌ Any use that violates applicable laws or regulations
+
+**By using this tool, you agree to use it responsibly and only for authorized research and educational purposes.**
 
 ## 🐛 Troubleshooting
 
@@ -331,17 +361,26 @@ python tests/test_smoke.py
 
 ## 📝 Citation
 
-If you use this tool in your research, please cite:
+If you use this tool in your research, please cite the original paper:
 
 ```bibtex
-@software{advtok2025,
-  title={AdvTok: Adversarial Tokenization Attacks on LLM Safety},
-  author={AdvTok Research Team},
-  year={2025},
-  version={1.1.0},
-  url={https://github.com/yourusername/advtok}
+@inproceedings{geh-etal-2025-adversarial,
+    title = "Adversarial Tokenization",
+    author = "Geh, Renato and Shao, Zilei and Van Den Broeck, Guy",
+    booktitle = "Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
+    month = jul,
+    year = "2025",
+    address = "Vienna, Austria",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2025.acl-long.1012/",
+    doi = "10.18653/v1/2025.acl-long.1012",
+    pages = "20738--20765"
 }
 ```
+
+**Original Implementation:** https://github.com/RenatoGeh/advtok
+
+**This Research Branch:** https://github.com/watson0x90/advtok (stability improvements and testing)
 
 ## 🤝 Contributing
 
@@ -356,11 +395,26 @@ See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for code quality standard
 
 ## 📄 License
 
-[Your License Here]
+MIT License - Copyright (c) 2025 Renato Lui Geh
+
+See [LICENSE](LICENSE) file for full details.
+
+This research branch maintains the same MIT license as the original implementation.
 
 ## 🙏 Acknowledgments
 
-- Original AdvTok research and implementation
+**Primary Credit:**
+- **Renato Geh, Zilei Shao, and Guy Van Den Broeck** for the original AdvTok research, algorithms, and implementation
+- Original repository: https://github.com/RenatoGeh/advtok
+- Paper: [Adversarial Tokenization (ACL 2025)](https://aclanthology.org/2025.acl-long.1012/)
+
+**This Research Branch:**
+- Stability fixes and performance optimizations
+- Comprehensive testing suite (90%+ coverage)
+- Enhanced documentation and educational materials
+- GUI improvements and chat template fixes
+
+**Libraries & Frameworks:**
 - Transformers library by HuggingFace
 - Textual framework for TUI
 - PyTorch and CUDA teams
@@ -368,8 +422,9 @@ See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for code quality standard
 ## 📧 Contact
 
 For questions, issues, or collaboration:
-- GitHub Issues: [repo]/issues
-- Email: [your email]
+- **GitHub Issues:** https://github.com/watson0x90/advtok/issues
+- **Original Authors:** See [original repository](https://github.com/RenatoGeh/advtok) for research inquiries
+- **This Research Branch:** For stability/implementation questions, open an issue on this repository
 
 ---
 
