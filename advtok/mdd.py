@@ -1,10 +1,26 @@
-import random, math, sys, heapq, multiprocessing, pickle, itertools, os, time
+"""
+Multi-valued Decision Diagram (MDD) utilities for tokenization search.
+
+Platform Notes:
+- Vocabulary caching uses parallel processing by default on ALL platforms (Windows/Linux/macOS).
+- On Windows, a special worker process initialization pattern is used to avoid tokenizer
+  pickling issues with the "spawn" multiprocessing start method.
+- On Unix systems (Linux/macOS), the standard parallel processing approach is used.
+- Both methods provide significant speedup over sequential processing.
+- Users can override this behavior by passing use_parallel=True/False to cache_vocab().
+- First-time vocabulary construction is cached to disk (.pkl file) for instant loading on subsequent runs.
+"""
+
+import random, math, sys, heapq, multiprocessing, pickle, itertools, os, time, platform
 import torch, transformers, tqdm, scipy, Levenshtein, numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import advtok.utils as utils
 
 sys.setrecursionlimit(100_000)
 torch.multiprocessing.set_start_method("spawn", force=True)
+
+# Detect if we're on Windows - multiprocessing with spawn can be problematic
+IS_WINDOWS = platform.system() == "Windows"
 
 MAR_BATCH_LIST = [(256, 50000), (128, 50000), (64, 50000), (32, 60000), (16, 70000), (8, 80000), (4, 90000), (2, 100000)]
 
@@ -599,18 +615,108 @@ def _select_vocab_const(tokenizer: AutoTokenizer):
     elif utils.is_gemma_tokenizer(tokenizer): return utils.partial(_gemma_vocab_const, tokenizer)
     return utils.partial(_vocab_const, tokenizer)
 
+# Global cache for tokenizers in worker processes (Windows multiprocessing compatibility)
+_WORKER_TOKENIZER = None
+_WORKER_VOCAB = None
+_WORKER_TOKENIZER_TYPE = None
+
+def _init_worker_tokenizer(tokenizer_name_or_path: str, tokenizer_type: str):
+    """Initialize tokenizer in worker process. This avoids pickling the tokenizer."""
+    global _WORKER_TOKENIZER, _WORKER_VOCAB, _WORKER_TOKENIZER_TYPE
+    _WORKER_TOKENIZER = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+    _WORKER_VOCAB = _WORKER_TOKENIZER.get_vocab()
+    _WORKER_TOKENIZER_TYPE = tokenizer_type
+
+def _worker_llama_vocab_const(k: str) -> tuple:
+    """Worker function for llama vocab construction."""
+    return k.replace('▁', ' '), _WORKER_VOCAB[k]
+
+def _worker_vocab_const(k: str) -> tuple:
+    """Worker function for general vocab construction."""
+    return (' ' if k.startswith('▁') else '') + _WORKER_TOKENIZER.convert_tokens_to_string([k]), _WORKER_VOCAB[k]
+
+def _worker_gemma_vocab_const(k: str) -> tuple:
+    """Worker function for gemma vocab construction."""
+    return _WORKER_TOKENIZER.convert_tokens_to_string([k]), _WORKER_VOCAB[k]
+
+def _worker_gemma2_vocab_const(k: str) -> tuple:
+    """Worker function for gemma2 vocab construction."""
+    a = _WORKER_TOKENIZER.convert_tokens_to_string([k])
+    return a, _WORKER_TOKENIZER.encode(a, add_special_tokens=False)[0]
+
+def _worker_llama3_vocab_const(k: str) -> tuple:
+    """Worker function for llama3 vocab construction."""
+    return _WORKER_TOKENIZER.convert_tokens_to_string([k]), _WORKER_VOCAB[k]
+
+def _get_worker_func(tokenizer_type: str):
+    """Get the appropriate worker function based on tokenizer type."""
+    if tokenizer_type == "llama3": return _worker_llama3_vocab_const
+    elif tokenizer_type == "llama": return _worker_llama_vocab_const
+    elif tokenizer_type == "gemma2": return _worker_gemma2_vocab_const
+    elif tokenizer_type == "gemma": return _worker_gemma_vocab_const
+    return _worker_vocab_const
+
+def _parallelize_vocab_windows(tokenizer: AutoTokenizer, vocab_keys: list) -> dict:
+    """Windows-compatible parallel vocabulary construction using worker process initialization."""
+    # Determine tokenizer type
+    if utils.is_llama3_tokenizer(tokenizer): tok_type = "llama3"
+    elif utils.is_llama_tokenizer(tokenizer): tok_type = "llama"
+    elif utils.is_gemma2_tokenizer(tokenizer) or utils.is_shieldgemma_tokenizer(tokenizer): tok_type = "gemma2"
+    elif utils.is_gemma_tokenizer(tokenizer): tok_type = "gemma"
+    else: tok_type = "default"
+
+    # Get tokenizer name/path (picklable)
+    tok_name = tokenizer.name_or_path
+
+    # Create pool with initializer to set up tokenizer in each worker
+    cpu_count = multiprocessing.cpu_count()
+    with multiprocessing.Pool(cpu_count, initializer=_init_worker_tokenizer,
+                              initargs=(tok_name, tok_type)) as pool:
+        # Get the appropriate worker function
+        worker_func = _get_worker_func(tok_type)
+        chunksize = max(1, math.ceil(len(vocab_keys) // cpu_count))
+
+        # Use imap with progress bar
+        results = list(tqdm.tqdm(pool.imap(worker_func, vocab_keys, chunksize=chunksize),
+                                 total=len(vocab_keys),
+                                 desc="Constructing vocabulary (parallel)"))
+
+    return dict(results)
+
 def cache_vocab(tokenizer: AutoTokenizer, cache_file: str = None, cache: dict = None,
-                persistent: bool = True):
+                persistent: bool = True, use_parallel: bool = None):
     if cache_file is None: cache_file = f"{utils._tok_name(tokenizer)}_vocab_cache.pkl"
     exists = os.path.isfile(cache_file)
     if exists:
         with open(cache_file, "rb") as f: V = pickle.load(f)
     elif cache is not None: V = cache
     else:
-        f_const = _select_vocab_const(tokenizer)
-        V = dict(utils.parallelize(f_const, tokenizer.get_vocab().keys(),
-                                   desc="Constructing vocabulary"))
-        #V = dict(map(f_const, tokenizer.get_vocab().keys()))
+        # Default to parallel processing on all platforms
+        if use_parallel is None:
+            use_parallel = True
+
+        if use_parallel:
+            try:
+                if IS_WINDOWS:
+                    # Use Windows-compatible parallel processing
+                    V = _parallelize_vocab_windows(tokenizer, list(tokenizer.get_vocab().keys()))
+                else:
+                    # Use original method on Unix
+                    f_const = _select_vocab_const(tokenizer)
+                    V = dict(utils.parallelize(f_const, tokenizer.get_vocab().keys(),
+                                               desc="Constructing vocabulary"))
+            except (RuntimeError, EOFError, pickle.PicklingError, Exception) as e:
+                print(f"Warning: Parallel vocab construction failed ({e}), falling back to sequential processing...")
+                f_const = _select_vocab_const(tokenizer)
+                V = dict(tqdm.tqdm(map(f_const, tokenizer.get_vocab().keys()),
+                                   total=len(tokenizer.get_vocab()),
+                                   desc="Constructing vocabulary (sequential)"))
+        else:
+            # Sequential processing
+            f_const = _select_vocab_const(tokenizer)
+            V = dict(tqdm.tqdm(map(f_const, tokenizer.get_vocab().keys()),
+                               total=len(tokenizer.get_vocab()),
+                               desc="Constructing vocabulary (sequential)"))
         if utils.is_llama_tokenizer(tokenizer) and ('\n' not in V): V['\n'] = 13
         # Make sure there is no empty string in the vocabulary.
         V.pop('', None)
