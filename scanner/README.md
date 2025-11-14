@@ -153,15 +153,31 @@ LOW: 1
 
 ### Report Files
 
-Two report formats are generated:
+Four report formats are generated:
 
 **1. Text Report (`advtok_scan_YYYYMMDD_HHMMSS.txt`)**
 - Executive summary with risk assessment
 - Detailed findings with evidence
 - Comprehensive recommendations with code examples
 - Easy to read and share
+- Perfect for command-line viewing
 
-**2. JSON Report (`advtok_scan_YYYYMMDD_HHMMSS.json`)**
+**2. Markdown Report (`advtok_scan_YYYYMMDD_HHMMSS.md`)**
+- GitHub-flavored markdown with emojis
+- Tables, code blocks, and formatting
+- Perfect for documentation and wikis
+- Easy to convert to other formats
+
+**3. HTML Report (`advtok_scan_YYYYMMDD_HHMMSS.html`)**
+- Beautiful, professional web interface
+- Color-coded severity levels
+- Responsive design (mobile-friendly)
+- Print-ready styling
+- Syntax-highlighted code blocks
+- No external dependencies (self-contained)
+- Open in any web browser
+
+**4. JSON Report (`advtok_scan_YYYYMMDD_HHMMSS.json`)**
 - Machine-readable format
 - Structured data for further analysis
 - Integration with security tools

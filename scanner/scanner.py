@@ -367,19 +367,31 @@ class AdvTokScanner:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_base = f"advtok_scan_{timestamp}"
 
-        # Generate text report
+        # Generate all report formats
         txt_path = os.path.join(output_dir, f"{report_base}.txt")
         self._generate_text_report(txt_path)
 
-        # Generate JSON report
+        md_path = os.path.join(output_dir, f"{report_base}.md")
+        self._generate_markdown_report(md_path)
+
+        html_path = os.path.join(output_dir, f"{report_base}.html")
+        self._generate_html_report(html_path)
+
         json_path = os.path.join(output_dir, f"{report_base}.json")
         self._generate_json_report(json_path)
 
         print(f"\n{Fore.GREEN}[✓] Reports generated:{Style.RESET_ALL}")
-        print(f"  - Text: {txt_path}")
-        print(f"  - JSON: {json_path}")
+        print(f"  - Text:     {txt_path}")
+        print(f"  - Markdown: {md_path}")
+        print(f"  - HTML:     {html_path}")
+        print(f"  - JSON:     {json_path}")
 
-        return txt_path, json_path
+        return {
+            "txt": txt_path,
+            "md": md_path,
+            "html": html_path,
+            "json": json_path
+        }
 
     def _generate_text_report(self, filepath: str):
         """Generate text format report"""
@@ -481,6 +493,544 @@ class AdvTokScanner:
             f.write("\n" + "=" * 80 + "\n")
             f.write("END OF REPORT\n")
             f.write("=" * 80 + "\n")
+
+    def _generate_markdown_report(self, filepath: str):
+        """Generate markdown format report"""
+        with open(filepath, 'w', encoding='utf-8') as f:
+            # Header
+            f.write("# AdvTok Vulnerability Scan Report\n\n")
+
+            # Metadata
+            f.write("## Scan Metadata\n\n")
+            f.write(f"- **Scanner Version:** {config.SCANNER_VERSION}\n")
+            f.write(f"- **Model:** `{self.model_name}`\n")
+            f.write(f"- **Scan Type:** {'Quick' if self.quick_scan else 'Comprehensive'}\n")
+            f.write(f"- **Start Time:** {self.scan_start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"- **End Time:** {self.scan_end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            duration = (self.scan_end_time - self.scan_start_time).total_seconds()
+            f.write(f"- **Duration:** {duration:.1f} seconds\n\n")
+
+            # Executive Summary
+            f.write("## Executive Summary\n\n")
+
+            severity_counts = {}
+            for finding in self.findings:
+                severity_counts[finding.severity] = severity_counts.get(finding.severity, 0) + 1
+
+            f.write(f"**Total Vulnerabilities Found:** {len(self.findings)}\n\n")
+
+            # Severity table
+            f.write("| Severity | Count |\n")
+            f.write("|----------|-------|\n")
+            for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+                count = severity_counts.get(severity, 0)
+                emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢", "INFO": "⚪"}.get(severity, "")
+                f.write(f"| {emoji} {severity} | {count} |\n")
+
+            # Risk assessment
+            f.write("\n### Risk Assessment\n\n")
+            if severity_counts.get("CRITICAL", 0) > 0:
+                f.write("🔴 **CRITICAL RISK** - Immediate action required\n\n")
+            elif severity_counts.get("HIGH", 0) > 0:
+                f.write("🟡 **HIGH RISK** - Address vulnerabilities promptly\n\n")
+            elif severity_counts.get("MEDIUM", 0) > 0:
+                f.write("🟠 **MEDIUM RISK** - Plan remediation\n\n")
+            else:
+                f.write("🟢 **LOW RISK** - Minor issues or informational\n\n")
+
+            # Detailed Findings
+            f.write("## Detailed Findings\n\n")
+
+            for i, finding in enumerate(self.findings, 1):
+                severity_emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢", "INFO": "⚪"}.get(finding.severity, "")
+
+                f.write(f"### {severity_emoji} Finding #{i}: {finding.name}\n\n")
+                f.write(f"- **ID:** `{finding.vuln_id}`\n")
+                f.write(f"- **Severity:** {finding.severity}\n")
+                f.write(f"- **Category:** {finding.category}\n\n")
+
+                f.write(f"**Description:**\n\n{finding.description}\n\n")
+
+                # Evidence
+                f.write("**Evidence:**\n\n")
+                f.write("```json\n")
+                f.write(json.dumps(finding.evidence, indent=2))
+                f.write("\n```\n\n")
+
+                # Recommendations
+                f.write("**Recommendations:**\n\n")
+                for rec_id in finding.recommendation_ids:
+                    rec = get_recommendation(rec_id)
+                    if rec:
+                        priority_emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢"}.get(rec.priority, "")
+                        f.write(f"- {priority_emoji} **[{rec.rec_id}] {rec.title}**\n")
+                        f.write(f"  - Priority: {rec.priority} | Effort: {rec.effort}\n")
+                        f.write(f"  - {rec.what}\n\n")
+
+                f.write("---\n\n")
+
+            # Comprehensive Recommendations
+            f.write("## Comprehensive Recommendations\n\n")
+
+            unique_recs = set()
+            for finding in self.findings:
+                unique_recs.update(finding.recommendation_ids)
+
+            for rec_id in sorted(unique_recs):
+                rec = get_recommendation(rec_id)
+                if rec:
+                    priority_emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢"}.get(rec.priority, "")
+
+                    f.write(f"### {priority_emoji} [{rec.rec_id}] {rec.title}\n\n")
+                    f.write(f"**Priority:** {rec.priority} | **Effort:** {rec.effort} | **Category:** {rec.category}\n\n")
+
+                    f.write(f"#### What\n\n{rec.what}\n\n")
+                    f.write(f"#### Why\n\n{rec.why}\n\n")
+                    f.write(f"#### How\n\n{rec.how}\n\n")
+                    f.write(f"#### Limitations\n\n{rec.limitations}\n\n")
+
+                    if rec.references:
+                        f.write("#### References\n\n")
+                        for ref in rec.references:
+                            f.write(f"- {ref}\n")
+                        f.write("\n")
+
+                    f.write("---\n\n")
+
+            # Footer
+            f.write("## Report Information\n\n")
+            f.write(f"Generated by AdvTok Vulnerability Scanner v{config.SCANNER_VERSION}\n\n")
+            f.write("For educational and security research purposes only.\n")
+
+    def _generate_html_report(self, filepath: str):
+        """Generate HTML format report"""
+        severity_counts = {}
+        for finding in self.findings:
+            severity_counts[finding.severity] = severity_counts.get(finding.severity, 0) + 1
+
+        duration = (self.scan_end_time - self.scan_start_time).total_seconds()
+
+        # Risk assessment
+        if severity_counts.get("CRITICAL", 0) > 0:
+            risk_level = "CRITICAL"
+            risk_color = "#dc3545"
+            risk_text = "Immediate action required"
+        elif severity_counts.get("HIGH", 0) > 0:
+            risk_level = "HIGH"
+            risk_color = "#ffc107"
+            risk_text = "Address vulnerabilities promptly"
+        elif severity_counts.get("MEDIUM", 0) > 0:
+            risk_level = "MEDIUM"
+            risk_color = "#fd7e14"
+            risk_text = "Plan remediation"
+        else:
+            risk_level = "LOW"
+            risk_color = "#28a745"
+            risk_text = "Minor issues or informational"
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdvTok Vulnerability Scan Report</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }}
+
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }}
+
+        h2 {{
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }}
+
+        h3 {{
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }}
+
+        .metadata {{
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }}
+
+        .metadata-item {{
+            margin: 8px 0;
+        }}
+
+        .metadata-label {{
+            font-weight: bold;
+            display: inline-block;
+            width: 150px;
+        }}
+
+        .summary {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }}
+
+        .summary h2 {{
+            color: white;
+            border: none;
+            margin-top: 0;
+            padding: 0;
+        }}
+
+        .severity-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }}
+
+        .severity-card {{
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }}
+
+        .severity-count {{
+            font-size: 2em;
+            font-weight: bold;
+        }}
+
+        .risk-assessment {{
+            background: {risk_color};
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-align: center;
+        }}
+
+        .risk-level {{
+            font-size: 1.5em;
+            font-weight: bold;
+        }}
+
+        .finding {{
+            background: #f8f9fa;
+            border-left: 4px solid #dee2e6;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }}
+
+        .finding.critical {{
+            border-left-color: #dc3545;
+        }}
+
+        .finding.high {{
+            border-left-color: #ffc107;
+        }}
+
+        .finding.medium {{
+            border-left-color: #fd7e14;
+        }}
+
+        .finding.low {{
+            border-left-color: #28a745;
+        }}
+
+        .finding.info {{
+            border-left-color: #6c757d;
+        }}
+
+        .badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin: 2px;
+        }}
+
+        .badge.critical {{
+            background: #dc3545;
+            color: white;
+        }}
+
+        .badge.high {{
+            background: #ffc107;
+            color: #333;
+        }}
+
+        .badge.medium {{
+            background: #fd7e14;
+            color: white;
+        }}
+
+        .badge.low {{
+            background: #28a745;
+            color: white;
+        }}
+
+        .badge.info {{
+            background: #6c757d;
+            color: white;
+        }}
+
+        .evidence {{
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }}
+
+        .recommendation {{
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }}
+
+        .recommendation h4 {{
+            color: #1976d2;
+            margin-bottom: 10px;
+        }}
+
+        .code-block {{
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }}
+
+        .footer {{
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+        }}
+
+        @media print {{
+            body {{
+                background: white;
+            }}
+
+            .container {{
+                box-shadow: none;
+                padding: 20px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 AdvTok Vulnerability Scan Report</h1>
+
+        <div class="metadata">
+            <div class="metadata-item">
+                <span class="metadata-label">Scanner Version:</span>
+                <span>{config.SCANNER_VERSION}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">Model:</span>
+                <code>{self.model_name}</code>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">Scan Type:</span>
+                <span>{'Quick' if self.quick_scan else 'Comprehensive'}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">Start Time:</span>
+                <span>{self.scan_start_time.strftime('%Y-%m-%d %H:%M:%S')}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">End Time:</span>
+                <span>{self.scan_end_time.strftime('%Y-%m-%d %H:%M:%S')}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">Duration:</span>
+                <span>{duration:.1f} seconds</span>
+            </div>
+        </div>
+
+        <div class="summary">
+            <h2>📊 Executive Summary</h2>
+            <p style="font-size: 1.2em; margin: 10px 0;">
+                <strong>Total Vulnerabilities Found:</strong> {len(self.findings)}
+            </p>
+
+            <div class="severity-grid">
+"""
+
+        # Add severity counts
+        for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+            count = severity_counts.get(severity, 0)
+            emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢", "INFO": "⚪"}.get(severity, "")
+            html_content += f"""
+                <div class="severity-card">
+                    <div>{emoji}</div>
+                    <div class="severity-count">{count}</div>
+                    <div>{severity}</div>
+                </div>
+"""
+
+        html_content += f"""
+            </div>
+
+            <div class="risk-assessment">
+                <div class="risk-level">{risk_level} RISK</div>
+                <div>{risk_text}</div>
+            </div>
+        </div>
+
+        <h2>🔍 Detailed Findings</h2>
+"""
+
+        # Add findings
+        for i, finding in enumerate(self.findings, 1):
+            severity_lower = finding.severity.lower()
+            emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢", "INFO": "⚪"}.get(finding.severity, "")
+
+            html_content += f"""
+        <div class="finding {severity_lower}">
+            <h3>{emoji} Finding #{i}: {finding.name}</h3>
+            <div>
+                <span class="badge {severity_lower}">{finding.severity}</span>
+                <span class="badge info">{finding.vuln_id}</span>
+                <span class="badge info">{finding.category}</span>
+            </div>
+
+            <p style="margin-top: 15px;"><strong>Description:</strong></p>
+            <p>{finding.description}</p>
+
+            <p style="margin-top: 15px;"><strong>Evidence:</strong></p>
+            <div class="evidence">{json.dumps(finding.evidence, indent=2)}</div>
+
+            <p style="margin-top: 15px;"><strong>Recommended Actions:</strong></p>
+"""
+
+            for rec_id in finding.recommendation_ids:
+                rec = get_recommendation(rec_id)
+                if rec:
+                    html_content += f"""
+            <div style="margin: 10px 0;">
+                • <strong>[{rec.rec_id}] {rec.title}</strong><br>
+                &nbsp;&nbsp;Priority: {rec.priority} | Effort: {rec.effort}
+            </div>
+"""
+
+            html_content += """
+        </div>
+"""
+
+        # Add recommendations
+        html_content += """
+        <h2>💡 Comprehensive Recommendations</h2>
+"""
+
+        unique_recs = set()
+        for finding in self.findings:
+            unique_recs.update(finding.recommendation_ids)
+
+        for rec_id in sorted(unique_recs):
+            rec = get_recommendation(rec_id)
+            if rec:
+                priority_lower = rec.priority.lower()
+                emoji = {"CRITICAL": "🔴", "HIGH": "🟡", "MEDIUM": "🟠", "LOW": "🟢"}.get(rec.priority, "")
+
+                html_content += f"""
+        <div class="recommendation">
+            <h3>{emoji} [{rec.rec_id}] {rec.title}</h3>
+            <div>
+                <span class="badge {priority_lower}">{rec.priority}</span>
+                <span class="badge info">Effort: {rec.effort}</span>
+                <span class="badge info">{rec.category}</span>
+            </div>
+
+            <h4>What</h4>
+            <p>{rec.what}</p>
+
+            <h4>Why</h4>
+            <p>{rec.why}</p>
+
+            <h4>How</h4>
+            <div class="code-block">{rec.how}</div>
+
+            <h4>Limitations</h4>
+            <p>{rec.limitations}</p>
+"""
+
+                if rec.references:
+                    html_content += """
+            <h4>References</h4>
+            <ul>
+"""
+                    for ref in rec.references:
+                        html_content += f"                <li>{ref}</li>\n"
+
+                    html_content += """
+            </ul>
+"""
+
+                html_content += """
+        </div>
+"""
+
+        # Footer
+        html_content += f"""
+        <div class="footer">
+            <p>Generated by <strong>AdvTok Vulnerability Scanner v{config.SCANNER_VERSION}</strong></p>
+            <p>For educational and security research purposes only</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html_content)
 
     def _generate_json_report(self, filepath: str):
         """Generate JSON format report"""

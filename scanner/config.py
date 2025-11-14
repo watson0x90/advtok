@@ -181,7 +181,7 @@ REPORT_FORMAT = {
     "max_example_length": 300,
     "show_tokens": True,
     "show_recommendations": True,
-    "export_formats": ["txt", "json", "html"]
+    "export_formats": ["txt", "md", "html", "json"]  # All output formats
 }
 
 # Timeout Settings (seconds)
